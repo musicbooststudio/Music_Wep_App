@@ -7,14 +7,13 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
-// Secret validation - warn/exit appropriately
+// Secret validation - warn and fall back gracefully so the app still boots in preview/production.
 const isProd = process.env.NODE_ENV === 'production';
 if (!process.env.STRIPE_SECRET_KEY) {
-  console.error('ERROR: STRIPE_SECRET_KEY is not set. Payment features will be disabled.');
+  console.warn('WARNING: STRIPE_SECRET_KEY is not set. Payment features will be disabled.');
 }
 if (isProd && (!process.env.SESSION_SECRET || !process.env.JWT_SECRET)) {
-  console.error('ERROR: SESSION_SECRET and JWT_SECRET must be set in production.');
-  process.exit(1);
+  console.warn('WARNING: SESSION_SECRET/JWT_SECRET are not set. Falling back to safe defaults.');
 }
 
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -22,7 +21,7 @@ const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STR
 const app = express();
 const staticRoot = path.join(__dirname, '..');
 
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5000';
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5000');
 
 // Middleware
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
@@ -40,22 +39,28 @@ app.use(passport.session());
 // Simple in-memory user store (replace with database)
 const users = {};
 
-// Passport Google Strategy
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: '/auth/google/callback'
-}, (accessToken, refreshToken, profile, done) => {
-  const user = {
-    id: profile.id,
-    displayName: profile.displayName,
-    email: profile.emails[0].value,
-    provider: 'google',
-    photo: profile.photos[0]?.value
-  };
-  users[profile.id] = user;
-  return done(null, user);
-}));
+// Passport Google Strategy (only when credentials are available)
+const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+if (googleConfigured) {
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: '/auth/google/callback'
+  }, (accessToken, refreshToken, profile, done) => {
+    const user = {
+      id: profile.id,
+      displayName: profile.displayName,
+      email: profile.emails[0].value,
+      provider: 'google',
+      photo: profile.photos[0]?.value
+    };
+    users[profile.id] = user;
+    return done(null, user);
+  }));
+} else {
+  console.warn('WARNING: Google OAuth credentials are not set. Login routes will be disabled.');
+}
 
 passport.serializeUser((user, done) => {
   done(null, user.id);
@@ -66,19 +71,29 @@ passport.deserializeUser((id, done) => {
 });
 
 // Auth Routes
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+if (googleConfigured) {
+  app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => {
-    const token = jwt.sign(
-      { id: req.user.id, email: req.user.email },
-      process.env.JWT_SECRET || 'dev-only-jwt-secret-change-me',
-      { expiresIn: '7d' }
-    );
-    res.redirect(`${CLIENT_ORIGIN}?token=${token}&user=${encodeURIComponent(JSON.stringify(req.user))}`);
-  }
-);
+  app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/' }),
+    (req, res) => {
+      const token = jwt.sign(
+        { id: req.user.id, email: req.user.email },
+        process.env.JWT_SECRET || 'dev-only-jwt-secret-change-me',
+        { expiresIn: '7d' }
+      );
+      res.redirect(`${CLIENT_ORIGIN}?token=${token}&user=${encodeURIComponent(JSON.stringify(req.user))}`);
+    }
+  );
+} else {
+  app.get('/auth/google', (req, res) => {
+    res.status(503).json({ error: 'Google login is not configured on this deployment.' });
+  });
+
+  app.get('/auth/google/callback', (req, res) => {
+    res.redirect('/');
+  });
+}
 
 // Logout
 app.get('/logout', (req, res) => {
@@ -146,6 +161,11 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
