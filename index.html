@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Music Boost AI Agent</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260810-3" />
   <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
@@ -15,11 +15,12 @@
       <h2>Sign In</h2>
       <p>Choose your preferred login method</p>
       <div class="login-options">
-        <a href="/auth/google" class="login-btn google">
+        <button class="login-btn google" id="googleLoginBtn" type="button">
           <span>Sign in with Google</span>
-        </a>
-        <button class="login-btn demo" id="demoLoginBtn">Demo Account</button>
+        </button>
+        <button class="login-btn demo" id="demoLoginBtn" type="button">Demo Account</button>
       </div>
+      <p class="preview-note">Preview hosting uses the demo account by default. Google sign-in is optional.</p>
     </div>
   </div>
 
@@ -59,21 +60,37 @@
   </header>
 
   <main id="home">
-    <header class="hero">
-      <div class="hero-badge">AI-Powered Mastering Studio</div>
-      <h1>🎵 Music Boost Agent</h1>
-      <p>Upload stems, shape your sound with pro-grade effects, detect key &amp; tempo, and export a polished master.</p>
-      <div class="detection-info">
-        <div class="detection-card">
-          <span class="detection-label">Key:</span>
-          <span class="detection-value" id="detectedKey">—</span>
+    <section class="hero premium-hero">
+      <div class="hero-copy">
+        <div class="hero-badge">AI-Powered Mastering Studio</div>
+        <h1>Craft elite mixes with cinematic precision.</h1>
+        <p>Upload stems, sculpt a polished master, and let AI-guided mastering take your production from rough draft to release-ready finish.</p>
+        <div class="hero-actions">
+          <button class="primary" id="heroUploadBtn" type="button">Start with your stems</button>
+          <button class="secondary" type="button">Explore the workflow</button>
         </div>
-        <div class="detection-card">
-          <span class="detection-label">Tempo:</span>
-          <span class="detection-value" id="detectedTempo">—</span>
+        <div class="detection-info">
+          <div class="detection-card">
+            <span class="detection-label">Key:</span>
+            <span class="detection-value" id="detectedKey">—</span>
+          </div>
+          <div class="detection-card">
+            <span class="detection-label">Tempo:</span>
+            <span class="detection-value" id="detectedTempo">—</span>
+          </div>
         </div>
       </div>
-    </header>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="orb orb-one"></div>
+        <div class="orb orb-two"></div>
+        <div class="hero-panel">
+          <div class="panel-glow"></div>
+          <div class="panel-row"></div>
+          <div class="panel-row short"></div>
+          <div class="panel-row"></div>
+        </div>
+      </div>
+    </section>
 
 <section id="workspace" class="studio-section">
       <div class="section-heading">
@@ -100,24 +117,74 @@
           </div>
         </div>
 
-        <div class="panel master-panel">
+        <div class="panel master-panel" id="masterPanel">
           <h2>Mastering</h2>
-          <div class="control-row">
-            <label>Master Gain <span id="masterGainValue">0.0 dB</span></label>
-            <input id="masterGain" type="range" min="-24" max="12" step="0.5" value="0" />
+          <div id="masteringContent" class="mastering-content hidden">
+            <div id="mixStateBadge" class="mix-state-badge">Clean • Ready to process</div>
+            <div class="control-row">
+              <label>Master Gain <span id="masterGainValue">0.0 dB</span></label>
+              <input id="masterGain" type="range" min="-24" max="12" step="0.5" value="0" />
+            </div>
+            <div class="control-row">
+              <label>Compression Threshold <span id="thresholdValue">-24 dB</span></label>
+              <input id="threshold" type="range" min="-60" max="0" step="1" value="-24" />
+            </div>
+            <div class="control-row">
+              <label>Compression Ratio <span id="ratioValue">2.0:1</span></label>
+              <input id="ratio" type="range" min="1" max="10" step="0.5" value="2" />
+            </div>
+            <div class="meter">
+              <div class="meter-fill" id="meterFill"></div>
+            </div>
+            <p class="meter-label">Output meter</p>
+
+            <div class="premium-tools">
+            <div class="tool-card">
+              <h3>Premium Studio</h3>
+              <label class="slider-block">
+                Stereo Width <span id="stereoWidthValue">20%</span>
+                <input id="stereoWidth" type="range" min="0" max="100" step="1" value="20" />
+              </label>
+              <label class="switch-row">
+                <span>Auto Leveling</span>
+                <input id="autoLevelingToggle" type="checkbox" checked />
+              </label>
+            </div>
+
+            <div class="tool-card">
+              <h3>Mastering Presets</h3>
+              <select id="masteringPresetSelect" class="preset-select">
+                <option value="balanced">Balanced</option>
+                <option value="radio">Radio Ready</option>
+                <option value="streaming">Streaming</option>
+                <option value="podcast">Podcast</option>
+                <option value="club">Club / Bass</option>
+              </select>
+              <div class="tool-actions">
+                <button type="button" id="applyPresetBtn" class="secondary small">Apply Preset</button>
+              </div>
+            </div>
+
+            <div class="tool-card">
+              <h3>Mix Assistant</h3>
+              <p id="mixAssistantMessage">Balanced mastering for a clean, release-ready mix.</p>
+              <button type="button" id="applyAssistantPreset" class="secondary small">Apply Suggested</button>
+            </div>
+
+            <div class="tool-card">
+              <h3>Snapshots</h3>
+              <div class="tool-actions">
+                <button type="button" id="saveSnapshotBtn" class="primary small">Save Snapshot</button>
+                <select id="snapshotSelect" class="preset-select"></select>
+                <button type="button" id="restoreSnapshotBtn" class="secondary small">Restore</button>
+              </div>
+            </div>
+            </div>
           </div>
-          <div class="control-row">
-            <label>Compression Threshold <span id="thresholdValue">-24 dB</span></label>
-            <input id="threshold" type="range" min="-60" max="0" step="1" value="-24" />
+          <div id="masteringPlaceholder" class="mastering-placeholder">
+            <h3>Upload your stems to unlock the mastering console</h3>
+            <p>Once your first mix is loaded, the premium controls appear instantly for sculpting, balancing, and export-ready polish.</p>
           </div>
-          <div class="control-row">
-            <label>Compression Ratio <span id="ratioValue">2.0:1</span></label>
-            <input id="ratio" type="range" min="1" max="10" step="0.5" value="2" />
-          </div>
-          <div class="meter">
-            <div class="meter-fill" id="meterFill"></div>
-          </div>
-          <p class="meter-label">Output meter</p>
         </div>
       </div>
     </section>
@@ -285,6 +352,6 @@
     </div>
   </footer>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20260810-3"></script>
 </body>
 </html>
