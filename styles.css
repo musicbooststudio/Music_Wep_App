@@ -182,6 +182,23 @@ button.secondary:hover:not(:disabled) {
   box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
 }
 
+button.small {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+
+button.compare-toggle.active {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.18) 0%, rgba(248, 81, 73, 0.08) 100%);
+  border-color: rgba(248, 81, 73, 0.35);
+  color: #ffd7d1;
+  box-shadow: 0 4px 14px rgba(248, 81, 73, 0.16);
+}
+
+button.compare-toggle.active:hover:not(:disabled) {
+  border-color: rgba(248, 81, 73, 0.5);
+  box-shadow: 0 8px 18px rgba(248, 81, 73, 0.22);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -583,6 +600,13 @@ input[type="range"] {
 .effect-help {
   margin-top: 8px;
   font-size: 0.82rem;
+  color: #8b949e;
+}
+
+.compare-note {
+  margin-top: -4px;
+  margin-bottom: 10px;
+  font-size: 0.84rem;
   color: #8b949e;
 }
 

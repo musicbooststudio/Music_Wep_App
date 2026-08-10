@@ -32,6 +32,7 @@ const mixAssistantMessage = document.getElementById('mixAssistantMessage');
 const saveSnapshotBtn = document.getElementById('saveSnapshotBtn');
 const snapshotSelect = document.getElementById('snapshotSelect');
 const restoreSnapshotBtn = document.getElementById('restoreSnapshotBtn');
+const compareModeBtn = document.getElementById('compareModeBtn');
 const heroUploadBtn = document.getElementById('heroUploadBtn');
 const masteringContent = document.getElementById('masteringContent');
 const masteringPlaceholder = document.getElementById('masteringPlaceholder');
@@ -48,6 +49,7 @@ let stripe = null;
 let cardElement = null;
 let stereoWidth = 20;
 let autoLevelingEnabled = false;
+let compareModeEnabled = false;
 let snapshots = [];
 let currentPresetName = 'balanced';
 
@@ -138,8 +140,26 @@ function toggleMasteringVisibility() {
 function updateMixStateBadge() {
   if (!mixStateBadge) return;
   const hasAppliedChanges = stems.some((stem) => stem.hasAppliedProcessing);
-  mixStateBadge.textContent = hasAppliedChanges ? 'Processing active' : 'Clean • Ready to process';
-  mixStateBadge.classList.toggle('active', hasAppliedChanges);
+  if (compareModeEnabled) {
+    mixStateBadge.textContent = 'Compare mode active';
+  } else {
+    mixStateBadge.textContent = hasAppliedChanges ? 'Processing active' : 'Raw preview';
+  }
+  mixStateBadge.classList.toggle('active', hasAppliedChanges || compareModeEnabled);
+}
+
+function updateCompareModeUI() {
+  if (!compareModeBtn) return;
+  compareModeBtn.textContent = compareModeEnabled ? 'Dry Compare: On' : 'Dry Compare: Off';
+  compareModeBtn.classList.toggle('active', compareModeEnabled);
+}
+
+function setCompareMode(enabled) {
+  compareModeEnabled = enabled;
+  updateCompareModeUI();
+  stems.forEach((_, index) => applyStemEffectsToAudioNodes(index));
+  updateMasteringControls();
+  updateMixStateBadge();
 }
 
 // Login/Logout handlers
@@ -386,6 +406,7 @@ function clamp(value, min, max) {
 }
 
 function shouldUseEffectChain(stem) {
+  if (compareModeEnabled) return false;
   return Boolean(
     stem?.hasAppliedProcessing ||
     stem?.denoiser > 0 ||
@@ -402,6 +423,7 @@ function shouldUseEffectChain(stem) {
 }
 
 function shouldUseMasteringChain(presetName = currentPresetName, gain = Number(masterGainControl.value), threshold = Number(thresholdControl.value), ratio = Number(ratioControl.value)) {
+  if (compareModeEnabled) return false;
   const normalizedGain = Number(gain);
   const normalizedThreshold = Number(threshold);
   const normalizedRatio = Number(ratio);
@@ -461,6 +483,11 @@ function applyMasteringPreset(presetName) {
 
 function updateMixAssistant() {
   if (!mixAssistantMessage) return;
+  if (compareModeEnabled) {
+    mixAssistantMessage.textContent = 'Dry compare is active. Toggle it off to hear the premium processing chain again.';
+    if (applyAssistantPresetBtn) applyAssistantPresetBtn.dataset.preset = 'balanced';
+    return;
+  }
   const stemCount = stems.length;
   const tempoText = detectedTempoElement.textContent || '';
   const tempoValue = Number(tempoText.replace(/\D/g, ''));
@@ -526,6 +553,7 @@ function saveSnapshot() {
     ratio: Number(ratioControl.value),
     stereoWidth,
     autoLevelingEnabled,
+    compareModeEnabled,
     currentPresetName,
     stems: stems.map((stem) => ({
       name: stem.name,
@@ -586,6 +614,7 @@ function restoreSnapshot() {
   ratioControl.value = snapshot.ratio;
   stereoWidth = snapshot.stereoWidth;
   autoLevelingEnabled = snapshot.autoLevelingEnabled;
+  compareModeEnabled = Boolean(snapshot.compareModeEnabled);
   currentPresetName = snapshot.currentPresetName || 'balanced';
   stems.forEach((stem, index) => {
     const snapshotStem = snapshot.stems[index];
@@ -606,9 +635,11 @@ function restoreSnapshot() {
     stem.lpf = snapshotStem.lpf;
     stem.autoGain = snapshotStem.autoGain || 0;
   });
+  updateCompareModeUI();
   renderTracks();
   updateMasteringControls();
   applyAutoLeveling();
+  updateMixStateBadge();
 }
 
 function updateMeter() {
@@ -634,42 +665,44 @@ function applyStemEffectsToAudioNodes(trackIndex) {
 
   stem.gainNode.gain.value = stem.muted ? 0 : getEffectiveStemGain(stem);
 
+  const useEffectChain = shouldUseEffectChain(stem);
+
   if (stem.panNode) {
     const effectivePan = clamp(stem.pan * (1 + stereoWidth / 100), -1, 1);
     stem.panNode.pan.value = effectivePan;
   }
 
   if (stem.denoiserNode) {
-    stem.denoiserNode.threshold.value = -60 + (100 - stem.denoiser) * 0.6;
+    stem.denoiserNode.threshold.value = useEffectChain ? -60 + (100 - stem.denoiser) * 0.6 : -100;
   }
   if (stem.lowNode) {
-    stem.lowNode.gain.value = stem.low;
+    stem.lowNode.gain.value = useEffectChain ? stem.low : 0;
   }
   if (stem.saturationNode) {
-    stem.saturationNode.curve = makeSaturation(stem.saturation);
+    stem.saturationNode.curve = useEffectChain ? makeSaturation(stem.saturation) : makeSaturation(0);
   }
   if (stem.tubeNode) {
-    stem.tubeNode.curve = makeTubeDistortion(stem.tubeDrive / 10);
+    stem.tubeNode.curve = useEffectChain ? makeTubeDistortion(stem.tubeDrive / 10) : makeTubeDistortion(0);
   }
   if (stem.dryNode && stem.wetNode && stem.reverbDelay) {
-    stem.dryNode.gain.value = 1 - (stem.reverb / 100) * 0.8;
-    stem.wetNode.gain.value = (stem.reverb / 100) * 0.5;
-    stem.reverbDelay.delayTime.value = 0.3 + (stem.reverb / 100) * 0.4;
+    stem.dryNode.gain.value = useEffectChain ? 1 - (stem.reverb / 100) * 0.8 : 1;
+    stem.wetNode.gain.value = useEffectChain ? (stem.reverb / 100) * 0.5 : 0;
+    stem.reverbDelay.delayTime.value = useEffectChain ? 0.3 + (stem.reverb / 100) * 0.4 : 0.3;
   }
   if (stem.hpfNode) {
-    stem.hpfNode.frequency.value = stem.hpf;
+    stem.hpfNode.frequency.value = useEffectChain ? stem.hpf : 20;
   }
   if (stem.lowMidNode) {
-    stem.lowMidNode.gain.value = stem.lowMid;
+    stem.lowMidNode.gain.value = useEffectChain ? stem.lowMid : 0;
   }
   if (stem.midNode) {
-    stem.midNode.gain.value = stem.mid;
+    stem.midNode.gain.value = useEffectChain ? stem.mid : 0;
   }
   if (stem.presenceNode) {
-    stem.presenceNode.gain.value = stem.presence;
+    stem.presenceNode.gain.value = useEffectChain ? stem.presence : 0;
   }
   if (stem.lpfNode) {
-    stem.lpfNode.frequency.value = stem.lpf;
+    stem.lpfNode.frequency.value = useEffectChain ? stem.lpf : 20000;
   }
 }
 
@@ -1064,14 +1097,44 @@ function playPlayback() {
     if (stem.source) return;
     const source = audioContext.createBufferSource();
     source.buffer = stem.buffer;
-    
-    const useEffectChain = shouldUseEffectChain(stem);
-
-    // Track gain and pan
     const gainNode = audioContext.createGain();
     const panNode = audioContext.createStereoPanner();
     gainNode.gain.value = stem.muted ? 0 : getEffectiveStemGain(stem);
     panNode.pan.value = clamp(stem.pan * (1 + stereoWidth / 100), -1, 1);
+
+    const useEffectChain = shouldUseEffectChain(stem);
+    if (!useEffectChain) {
+      source.connect(gainNode);
+      gainNode.connect(panNode);
+      panNode.connect(masterGainNode);
+      source.start();
+      stem.source = source;
+      stem.gainNode = gainNode;
+      stem.panNode = panNode;
+      stem.denoiserNode = null;
+      stem.lowNode = null;
+      stem.saturationNode = null;
+      stem.tubeNode = null;
+      stem.dryNode = null;
+      stem.wetNode = null;
+      stem.reverbDelay = null;
+      stem.hpfNode = null;
+      stem.lowMidNode = null;
+      stem.midNode = null;
+      stem.presenceNode = null;
+      stem.lpfNode = null;
+      source.onended = () => {
+        stem.source = null;
+        stem.gainNode = null;
+        stem.panNode = null;
+        if (!stems.some((s) => s.source)) {
+          isPlaying = false;
+          stopButton.disabled = true;
+          playButton.disabled = false;
+        }
+      };
+      return;
+    }
     
     // Per-stem denoiser (noise gate using compressor)
     const denoiserNode = audioContext.createDynamicsCompressor();
@@ -1204,8 +1267,10 @@ async function exportMix() {
   if (!stems.length) return;
   ensureAudioContext();
   const sampleRate = audioContext.sampleRate;
+  const tailSeconds = 2;
   const maxLength = stems.reduce((max, stem) => Math.max(max, stem.buffer.length), 0);
-  const offlineContext = new OfflineAudioContext(2, maxLength, sampleRate);
+  const offlineLength = maxLength + Math.ceil(sampleRate * tailSeconds);
+  const offlineContext = new OfflineAudioContext(2, offlineLength, sampleRate);
   
   // Compression and output
   const offlineMasterGain = offlineContext.createGain();
@@ -1225,12 +1290,19 @@ async function exportMix() {
     bufferSource.buffer = stem.buffer;
     const useEffectChain = shouldUseEffectChain(stem);
     
-// Per-stem gain and pan
     const gainNode = offlineContext.createGain();
     const panNode = offlineContext.createStereoPanner();
     const isMuted = stems.some((s) => s.solo) ? !stem.solo : stem.muted;
     gainNode.gain.value = isMuted ? 0 : getEffectiveStemGain(stem);
     panNode.pan.value = clamp(stem.pan * (1 + stereoWidth / 100), -1, 1);
+
+    if (!useEffectChain) {
+      bufferSource.connect(gainNode);
+      gainNode.connect(panNode);
+      panNode.connect(offlineMasterGain);
+      bufferSource.start();
+      return;
+    }
 
     // Per-stem denoiser (noise gate using compressor)
     const denoiserNode = offlineContext.createDynamicsCompressor();
@@ -1329,9 +1401,9 @@ async function exportMix() {
 function encodeWAV(buffer) {
   const numChannels = 2;
   const sampleRate = buffer.sampleRate;
-  const format = 1;
+  const format = 3;
   const samples = mergeBuffers(buffer);
-  const dataLength = samples.length * 2;
+  const dataLength = samples.length * 4;
   const bufferLength = 44 + dataLength;
   const arrayBuffer = new ArrayBuffer(bufferLength);
   const view = new DataView(arrayBuffer);
@@ -1343,12 +1415,12 @@ function encodeWAV(buffer) {
   view.setUint16(20, format, true);
   view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * numChannels * 2, true);
-  view.setUint16(32, numChannels * 2, true);
-  view.setUint16(34, 16, true);
+  view.setUint32(28, sampleRate * numChannels * 4, true);
+  view.setUint16(32, numChannels * 4, true);
+  view.setUint16(34, 32, true);
   writeString(view, 36, 'data');
   view.setUint32(40, dataLength, true);
-  floatTo16BitPCM(view, 44, samples);
+  floatTo32BitPCM(view, 44, samples);
   return view;
 }
 
@@ -1358,17 +1430,15 @@ function mergeBuffers(buffer) {
   const channelData0 = buffer.getChannelData(0);
   const channelData1 = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : channelData0;
   for (let i = 0; i < length; i += 1) {
-    result[i * 2] = Math.max(-1, Math.min(1, channelData0[i]));
-    result[i * 2 + 1] = Math.max(-1, Math.min(1, channelData1[i]));
+    result[i * 2] = channelData0[i];
+    result[i * 2 + 1] = channelData1[i];
   }
   return result;
 }
 
-function floatTo16BitPCM(output, offset, input) {
+function floatTo32BitPCM(output, offset, input) {
   for (let i = 0; i < input.length; i += 1) {
-    let s = Math.max(-1, Math.min(1, input[i]));
-    s = s < 0 ? s * 0x8000 : s * 0x7fff;
-    output.setInt16(offset + i * 2, s, true);
+    output.setFloat32(offset + i * 4, input[i], true);
   }
 }
 
@@ -1531,6 +1601,10 @@ applyAssistantPresetBtn?.addEventListener('click', () => {
 });
 saveSnapshotBtn?.addEventListener('click', saveSnapshot);
 restoreSnapshotBtn?.addEventListener('click', restoreSnapshot);
+compareModeBtn?.addEventListener('click', () => {
+  setCompareMode(!compareModeEnabled);
+});
+updateCompareModeUI();
 
 // Set current year in footer
 const yearEl = document.getElementById('year');
