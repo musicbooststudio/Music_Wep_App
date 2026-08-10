@@ -11,6 +11,7 @@ A professional web application for uploading audio stems, mixing and mastering w
 - 🎛️ Advanced per-stem effects:
   - **Tube Drive** (0-100%): Waveshaper-based harmonic distortion
   - **Reverb** (0-100%): Delay-based reverb with adjustable feedback
+  - **Quick Presets** or **manual sliders** for fast flavor changes and detailed sculpting
   - **Parametric EQ** with 5 bands:
     - HPF (20-500Hz): Removes low-frequency rumble
     - Low Mid (±12dB @ 250Hz): Adds warmth and body
@@ -129,10 +130,9 @@ npx http-server -p 3000
 - **Solo**: Listen to only the selected stem
 
 ### Applying Effects
-Click the "Effects" dropdown on each track to access:
-- Tube Drive: Add harmonic warmth or grit
-- Reverb: Add space and depth
-- EQ Controls: Shape the tone with 5-band parametric EQ
+Open the "Effects" panel on any track to choose between:
+- **Quick Presets** for instant styles like Clean, Warm, Bright, Vintage, and Dense
+- **Manual Sliders** for precise control over tube drive, reverb, denoiser, and EQ
 
 ### Key & Tempo Detection
 - **Key**: Automatically detected when stems are loaded (shown in header)
@@ -272,3 +272,6 @@ This project is provided as-is for educational and commercial use.
 
 For issues or feature requests, please review the console logs and troubleshooting section above.
 
+#   M u s i c _ W e p _ A p p  
+ #   M u s i c _ W e p _ A p p  
+ 
