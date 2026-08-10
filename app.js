@@ -422,6 +422,10 @@ function shouldUseEffectChain(stem) {
   );
 }
 
+function isNeutralStem(stem) {
+  return !shouldUseEffectChain(stem);
+}
+
 function shouldUseMasteringChain(presetName = currentPresetName, gain = Number(masterGainControl.value), threshold = Number(thresholdControl.value), ratio = Number(ratioControl.value)) {
   if (compareModeEnabled) return false;
   const normalizedGain = Number(gain);
@@ -787,6 +791,7 @@ function createTrackCard(stem, index) {
   const card = document.createElement('article');
   card.className = 'track-card';
   const effectMode = stem.effectMode || 'manual';
+  const isBypassed = isNeutralStem(stem);
   const effectControlsHtml = effectMode === 'quick' ? `
     <div class="effect-preset-grid">
       <button type="button" class="effect-preset-btn" data-track="${index}" data-preset="clean">Clean</button>
@@ -859,7 +864,10 @@ function createTrackCard(stem, index) {
   `;
 
   card.innerHTML = `
-    <h3>${stem.name}</h3>
+    <div class="track-header">
+      <h3>${stem.name}</h3>
+      ${isBypassed ? '<span class="track-badge">Bypassed</span>' : ''}
+    </div>
     <div class="track-controls">
       <label>Gain <span class="value">${stem.gain.toFixed(1)} dB</span>
         <input type="range" min="-24" max="12" step="0.5" value="${stem.gain}" data-track="${index}" data-control="gain">
