@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Boost AI Agent</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Sign In</h2>
+      <p>Choose your preferred login method</p>
+      <div class="login-options">
+        <a href="/auth/google" class="login-btn google">
+          <span>Sign in with Google</span>
+        </a>
+        <button class="login-btn demo" id="demoLoginBtn">Demo Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payment Modal -->
+  <div id="paymentModal" class="modal">
+    <div class="modal-content payment-modal">
+      <span class="close">&times;</span>
+      <h2>Export Mix</h2>
+      <p>One-time payment for export: <strong>$2.99</strong></p>
+      <div id="card-element"></div>
+      <div id="card-errors" role="alert"></div>
+      <button id="submit-payment" class="primary">Complete Payment & Export</button>
+    </div>
+  </div>
+
+<!-- Site Header -->
+  <header class="site-header">
+    <nav class="navbar">
+      <a href="#home" class="brand">
+        <span class="brand-logo">🎵</span>
+        <span class="brand-text">Music Boost <em>AI</em></span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#home">Home</a></li>
+        <li><a href="#workspace">Studio</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#docs">Docs</a></li>
+      </ul>
+      <div class="auth-section">
+        <span id="userDisplay" style="display:none;">
+          <span id="userName"></span>
+          <button id="logoutBtn" class="secondary">Logout</button>
+        </span>
+        <button id="loginBtn" class="secondary">Login</button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="home">
+    <header class="hero">
+      <div class="hero-badge">AI-Powered Mastering Studio</div>
+      <h1>🎵 Music Boost Agent</h1>
+      <p>Upload stems, shape your sound with pro-grade effects, detect key &amp; tempo, and export a polished master.</p>
+      <div class="detection-info">
+        <div class="detection-card">
+          <span class="detection-label">Key:</span>
+          <span class="detection-value" id="detectedKey">—</span>
+        </div>
+        <div class="detection-card">
+          <span class="detection-label">Tempo:</span>
+          <span class="detection-value" id="detectedTempo">—</span>
+        </div>
+      </div>
+    </header>
+
+<section id="workspace" class="studio-section">
+      <div class="section-heading">
+        <h2>Your Studio</h2>
+        <p>Upload, arrange, and shape your stems in real time.</p>
+      </div>
+      <div class="uploader">
+        <label class="upload-card" id="dropZone">
+          <span class="upload-title">Drop stems here or click to browse</span>
+          <input id="fileInput" type="file" accept="audio/*" multiple />
+        </label>
+        <div class="actions-row">
+          <button id="playButton" class="primary">Play</button>
+          <button id="stopButton" class="secondary" disabled>Stop</button>
+          <button id="exportButton" class="secondary" disabled>Export Mix</button>
+        </div>
+      </div>
+
+      <div class="controls-panel">
+        <div class="panel">
+          <h2>Tracks</h2>
+          <div id="trackList" class="track-list">
+            <p class="empty-state">No stems loaded yet.</p>
+          </div>
+        </div>
+
+        <div class="panel master-panel">
+          <h2>Mastering</h2>
+          <div class="control-row">
+            <label>Master Gain <span id="masterGainValue">0.0 dB</span></label>
+            <input id="masterGain" type="range" min="-24" max="12" step="0.5" value="0" />
+          </div>
+          <div class="control-row">
+            <label>Compression Threshold <span id="thresholdValue">-24 dB</span></label>
+            <input id="threshold" type="range" min="-60" max="0" step="1" value="-24" />
+          </div>
+          <div class="control-row">
+            <label>Compression Ratio <span id="ratioValue">2.0:1</span></label>
+            <input id="ratio" type="range" min="1" max="10" step="0.5" value="2" />
+          </div>
+          <div class="meter">
+            <div class="meter-fill" id="meterFill"></div>
+          </div>
+          <p class="meter-label">Output meter</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+      <div class="section-heading">
+        <h2>Studio Features</h2>
+        <p>Everything you need to craft a release-ready mix.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">🎚️</span>
+          <h3>Per-Track Mixing</h3>
+          <p>Independent gain and pan for every stem, plus mute and solo controls to audition your arrangement instantly.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🎛️</span>
+          <h3>Pro Effects Chain</h3>
+          <p>Denoiser, Low shelf, HPF/LPF, Low-Mid, Mid, Presence, Saturation, Tube Drive and Reverb — applied to each stem.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🔬</span>
+          <h3>Key &amp; Tempo Detection</h3>
+          <p>Automatic analysis of the first stem to reveal its musical key and BPM, perfect for remixes and DJ sets.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📈</span>
+          <h3>Mastering Bus</h3>
+          <p>Master gain, compression threshold and ratio shape the final glue, with a live output level meter.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">💾</span>
+          <h3>One-Click Export</h3>
+          <p>Render the full mixdown to a high-quality WAV file. Login with Google or a Demo account, then export after payment.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">⌨️</span>
+          <h3>Keyboard Shortcuts</h3>
+          <p>Press Space to play/stop and Ctrl/Cmd + E to export, so you can work faster without touching the mouse.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Docs Section -->
+  <section id="docs" class="docs-section">
+    <div class="section-heading">
+      <h2>Documentation &amp; How-To Guide</h2>
+      <p>A complete walkthrough of every feature and how to use Music Boost.</p>
+    </div>
+
+    <div class="docs-grid">
+      <div class="doc-article">
+        <h3>🚀 Getting Started</h3>
+        <ol>
+          <li><strong>Launch the app</strong> — open the Music Boost interface in your browser.</li>
+          <li><strong>Upload stems</strong> — drag &amp; drop audio files (WAV, MP3, and more) onto the upload zone, or click to browse for multiple files at once.</li>
+          <li><strong>Wait for analysis</strong> — the app automatically detects the key and tempo of your first stem.</li>
+          <li><strong>Press Play</strong> to preview your mix and start shaping your sound.</li>
+        </ol>
+      </div>
+
+      <div class="doc-article">
+        <h3>🎚️ Track Controls</h3>
+        <ul>
+          <li><strong>Gain</strong> — adjust the volume of each stem from −24 dB to +12 dB.</li>
+          <li><strong>Pan</strong> — position the stem anywhere between left (−1) and right (+1).</li>
+          <li><strong>Mute</strong> — silence a stem without removing it from the mix.</li>
+          <li><strong>Solo</strong> — isolate one stem; enabling solo automatically mutes all others.</li>
+        </ul>
+      </div>
+
+      <div class="doc-article">
+        <h3>🎛️ Effects &amp; Tone Shaping</h3>
+        <p>Open the <strong>Effects</strong> panel on each track to access:</p>
+        <ul>
+          <li><strong>Denoiser</strong> (0–100%) — a noise gate that reduces background hiss and room tone.</li>
+          <li><strong>Low</strong> (−12 to +12 dB) — a low-shelf filter that boosts or cuts the bass region.</li>
+          <li><strong>Saturation</strong> (0–100%) — adds analog-style warmth and harmonics.</li>
+          <li><strong>Tube Drive</strong> (0–100%) — emulates classic tube distortion for grit and character.</li>
+          <li><strong>Reverb</strong> (0–100%) — adds space and depth with a feedback delay.</li>
+          <li><strong>HPF</strong> (20–500 Hz) — high-pass filter removes unwanted low rumble.</li>
+          <li><strong>Low Mid / Mid / Presence</strong> — peaking EQ bands for surgical tonal control.</li>
+          <li><strong>LPF</strong> (2000–20000 Hz) — low-pass filter tames harsh highs.</li>
+        </ul>
+      </div>
+
+      <div class="doc-article">
+        <h3>📈 Mastering Your Mix</h3>
+        <p>The <strong>Mastering</strong> panel applies global processing to the whole mix:</p>
+        <ul>
+          <li><strong>Master Gain</strong> — overall output level (−24 to +12 dB).</li>
+          <li><strong>Compression Threshold</strong> — the level at which compression kicks in.</li>
+          <li><strong>Compression Ratio</strong> — how strongly the signal is compressed above the threshold.</li>
+          <li><strong>Output Meter</strong> — a live level meter so you can avoid clipping.</li>
+        </ul>
+      </div>
+
+      <div class="doc-article">
+        <h3>💾 Exporting Your Mix</h3>
+        <ol>
+          <li>Click the <strong>Export Mix</strong> button.</li>
+          <li>If you aren't signed in, <strong>login with Google</strong> or use the <strong>Demo Account</strong>.</li>
+          <li>Complete the one-time <strong>$2.99 payment</strong> via the secure Stripe checkout.</li>
+          <li>Your fully processed mixdown downloads automatically as a <strong>WAV file</strong>.</li>
+        </ol>
+      </div>
+
+      <div class="doc-article">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <ul>
+          <li><strong>Space</strong> — play or stop playback.</li>
+          <li><strong>Ctrl / Cmd + E</strong> — open the export flow.</li>
+        </ul>
+        <p class="tip">Tip: Shortcuts are disabled while typing in any input field so you can rename and tweak safely.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <span class="brand-logo">🎵</span>
+        <div>
+          <h3>Music Boost Agent</h3>
+          <p>An AI-powered web studio for mixing and mastering your stems, right in the browser.</p>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h4>Docs Menu</h4>
+        <a href="#docs">Getting Started</a>
+        <a href="#docs">Track Controls</a>
+        <a href="#docs">Effects &amp; Tone</a>
+        <a href="#docs">Mastering</a>
+        <a href="#docs">Exporting</a>
+        <a href="#docs">Keyboard Shortcuts</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Features</h4>
+        <a href="#features">Per-Track Mixing</a>
+        <a href="#features">Pro Effects Chain</a>
+        <a href="#features">Key &amp; Tempo Detection</a>
+        <a href="#features">Mastering Bus</a>
+        <a href="#features">One-Click Export</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Quick Links</h4>
+        <a href="#home">Home</a>
+        <a href="#workspace">Studio</a>
+        <a href="#features">Features</a>
+        <a href="#docs">Documentation</a>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>&copy; <span id="year"></span> Music Boost Agent. Built with the Web Audio API.</p>
+      <div class="footer-social">
+        <span>Made with ♥ for musicians</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
