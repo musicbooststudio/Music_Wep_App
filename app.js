@@ -43,6 +43,12 @@ const sepResults = document.getElementById('sepResults');
 const sepStemList = document.getElementById('sepStemList');
 const loadStemsBtn = document.getElementById('loadStemsBtn');
 const clearSepBtn = document.getElementById('clearSepBtn');
+const sepModeFilter = document.getElementById('sepModeFilter');
+const sepModeAI = document.getElementById('sepModeAI');
+const sepAIConfig = document.getElementById('sepAIConfig');
+const replicateKeyInput = document.getElementById('replicateKeyInput');
+const saveReplicateKey = document.getElementById('saveReplicateKey');
+const replicateKeyStatus = document.getElementById('replicateKeyStatus');
 const masteringContent = document.getElementById('masteringContent');
 const masteringPlaceholder = document.getElementById('masteringPlaceholder');
 const mixStateBadge = document.getElementById('mixStateBadge');
@@ -62,6 +68,8 @@ let compareModeEnabled = false;
 let snapshots = [];
 let currentPresetName = 'balanced';
 let separatedStems = []; // pending separator results before user loads into mixer
+let separatorMode = 'filter'; // 'filter' | 'ai'
+let replicateApiKey = '';
 
 // Initialize Stripe
 function initStripe() {
@@ -112,6 +120,12 @@ window.addEventListener('load', () => {
   loadSnapshots();
   initStripe();
   ensureAudioContext();
+  replicateApiKey = localStorage.getItem('replicateApiKey') || '';
+  if (replicateApiKey && replicateKeyInput) {
+    replicateKeyInput.value = replicateApiKey;
+    replicateKeyStatus.textContent = 'API key loaded ✓';
+    replicateKeyStatus.className = 'sep-key-status ok';
+  }
   const preset = getPresetConfig('balanced');
   currentPresetName = 'balanced';
   masterGainControl.value = preset.masterGain;
@@ -1112,6 +1126,130 @@ function clearSeparatedStems() {
   renderSepResults();
 }
 
+async function separateWithReplicate(file) {
+  clearSeparatedStems();
+  ensureAudioContext();
+  separationProgress.classList.remove('hidden');
+  sepBar.style.width = '5%';
+  sepStatus.textContent = 'Uploading to Replicate…';
+
+  const authHeaders = { 'Authorization': `Bearer ${replicateApiKey}` };
+
+  // Step 1: upload file to Replicate file store
+  let fileUrl;
+  try {
+    const upRes = await fetch('https://api.replicate.com/v1/files', {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': file.type || 'audio/mpeg' },
+      body: file,
+    });
+    if (!upRes.ok) {
+      const err = await upRes.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${upRes.status}`);
+    }
+    const upData = await upRes.json();
+    fileUrl = upData.urls?.get || upData.url;
+  } catch (err) {
+    sepStatus.textContent = `Upload failed: ${err.message}`;
+    separationProgress.classList.add('hidden');
+    return;
+  }
+
+  // Step 2: create Demucs prediction
+  sepBar.style.width = '20%';
+  sepStatus.textContent = 'Starting AI separation (this takes 1–3 min)…';
+  let predictionId;
+  try {
+    const predRes = await fetch('https://api.replicate.com/v1/models/cjwbw/demucs/predictions', {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { audio: fileUrl, stem: 'all', model: 'htdemucs' } }),
+    });
+    if (!predRes.ok) {
+      const err = await predRes.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${predRes.status}`);
+    }
+    const predData = await predRes.json();
+    predictionId = predData.id;
+  } catch (err) {
+    sepStatus.textContent = `Failed to start: ${err.message}`;
+    separationProgress.classList.add('hidden');
+    return;
+  }
+
+  // Step 3: poll until succeeded
+  let output = null;
+  for (let attempt = 0; attempt < 90; attempt++) {
+    await new Promise(r => setTimeout(r, 2000));
+    let poll;
+    try {
+      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, { headers: authHeaders });
+      poll = await pollRes.json();
+    } catch { continue; }
+    if (poll.status === 'succeeded') { output = poll.output; break; }
+    if (poll.status === 'failed' || poll.status === 'canceled') {
+      sepStatus.textContent = `AI separation failed: ${poll.error || poll.status}`;
+      separationProgress.classList.add('hidden');
+      return;
+    }
+    const pct = Math.min(88, 22 + (attempt / 90) * 66);
+    sepBar.style.width = `${pct}%`;
+    sepStatus.textContent = `AI processing… (${(attempt + 1) * 2}s elapsed)`;
+  }
+
+  if (!output) {
+    sepStatus.textContent = 'Timed out waiting for AI result. Try again.';
+    separationProgress.classList.add('hidden');
+    return;
+  }
+
+  // Step 4: download and decode each stem
+  // Demucs output may be an object {bass,drums,vocals,other} or array
+  const stemMap = Array.isArray(output)
+    ? Object.fromEntries(['bass','drums','other','vocals'].map((k, i) => [k, output[i]]))
+    : output;
+
+  const base = file.name.replace(/\.[^.]+$/, '');
+  const order = ['bass', 'drums', 'vocals', 'other'];
+  for (const key of order) {
+    const url = stemMap[key];
+    if (!url) continue;
+    sepStatus.textContent = `Downloading ${key}…`;
+    sepBar.style.width = `${90 + order.indexOf(key) * 2.5}%`;
+    try {
+      const res = await fetch(url);
+      const ab = await res.arrayBuffer();
+      const buf = await audioContext.decodeAudioData(ab);
+      const stem = makeStemObject(`${base} — ${key.charAt(0).toUpperCase() + key.slice(1)}`, buf);
+      stem.fromSeparator = true;
+      separatedStems.push(stem);
+    } catch (err) {
+      console.warn(`Could not load ${key} stem:`, err);
+    }
+  }
+
+  sepBar.style.width = '100%';
+  sepStatus.textContent = `AI separation complete — ${separatedStems.length} stems ready.`;
+  await new Promise(r => setTimeout(r, 150));
+  separationProgress.classList.add('hidden');
+  sepBar.style.width = '0%';
+  renderSepResults();
+}
+
+function handleSeparatorFile(file) {
+  if (separatorMode === 'ai') {
+    if (!replicateApiKey) {
+      sepAIConfig.classList.remove('hidden');
+      replicateKeyInput?.focus();
+      sepStatus.textContent = 'Please enter your Replicate API key first.';
+      return;
+    }
+    separateWithReplicate(file);
+  } else {
+    separateTrack(file);
+  }
+}
+
 async function separateTrack(file) {
   clearSeparatedStems(); // clear old results and evict prior separator stems from mixer
   ensureAudioContext();
@@ -1650,7 +1788,7 @@ fileInput.addEventListener('change', (event) => {
 });
 
 separateInput?.addEventListener('change', (e) => {
-  if (e.target.files?.[0]) separateTrack(e.target.files[0]);
+  if (e.target.files?.[0]) handleSeparatorFile(e.target.files[0]);
   e.target.value = '';
 });
 
@@ -1659,7 +1797,34 @@ sepDropZone?.addEventListener('dragleave', () => sepDropZone.classList.remove('d
 sepDropZone?.addEventListener('drop', (e) => {
   e.preventDefault();
   sepDropZone.classList.remove('dragover');
-  if (e.dataTransfer?.files?.[0]) separateTrack(e.dataTransfer.files[0]);
+  if (e.dataTransfer?.files?.[0]) handleSeparatorFile(e.dataTransfer.files[0]);
+});
+
+sepModeFilter?.addEventListener('click', () => {
+  separatorMode = 'filter';
+  sepModeFilter.classList.add('active');
+  sepModeAI.classList.remove('active');
+  sepAIConfig.classList.add('hidden');
+});
+
+sepModeAI?.addEventListener('click', () => {
+  separatorMode = 'ai';
+  sepModeAI.classList.add('active');
+  sepModeFilter.classList.remove('active');
+  sepAIConfig.classList.remove('hidden');
+});
+
+saveReplicateKey?.addEventListener('click', () => {
+  const key = (replicateKeyInput?.value || '').trim();
+  if (key && !key.startsWith('r8_')) {
+    replicateKeyStatus.textContent = 'Invalid key — Replicate keys start with r8_';
+    replicateKeyStatus.className = 'sep-key-status err';
+    return;
+  }
+  replicateApiKey = key;
+  localStorage.setItem('replicateApiKey', key);
+  replicateKeyStatus.textContent = key ? 'Key saved ✓' : 'Key cleared';
+  replicateKeyStatus.className = 'sep-key-status ok';
 });
 
 loadStemsBtn?.addEventListener('click', () => {

@@ -204,6 +204,30 @@
         <h2>Stem Separator</h2>
         <p>Upload a mixed track to isolate Bass, Drums, Vocals and Other into individual stems, then load only the ones you want into the mixer.</p>
       </div>
+      <div class="sep-mode-toggle">
+        <button type="button" class="sep-mode-btn active" id="sepModeFilter">&#9889; Fast (Filter)</button>
+        <button type="button" class="sep-mode-btn" id="sepModeAI">&#129302; AI &mdash; Demucs</button>
+      </div>
+      <div id="sepAIConfig" class="sep-ai-config hidden">
+        <p class="sep-ai-note">Uses <strong>Demucs</strong> via <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noopener noreferrer">Replicate</a> for near-perfect source separation. Free tier: ~500 runs/month. Your key is stored only in your browser.</p>
+        <div class="sep-key-row">
+          <input type="password" id="replicateKeyInput" class="sep-key-input" placeholder="r8_…" autocomplete="off" spellcheck="false" />
+          <button type="button" id="saveReplicateKey" class="primary small">Save Key</button>
+        </div>
+        <p id="replicateKeyStatus" class="sep-key-status"></p>
+      </div>
+      <div class="sep-mode-toggle">
+        <button type="button" class="sep-mode-btn active" id="sepModeFilter">&#9889; Fast (Filter)</button>
+        <button type="button" class="sep-mode-btn" id="sepModeAI">&#129302; AI &mdash; Demucs</button>
+      </div>
+      <div id="sepAIConfig" class="sep-ai-config hidden">
+        <p class="sep-ai-note">Uses <strong>Demucs</strong> via <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noopener noreferrer">Replicate</a> for near-perfect source separation. Free tier: ~500 runs/month. Your key is stored only in your browser.</p>
+        <div class="sep-key-row">
+          <input type="password" id="replicateKeyInput" class="sep-key-input" placeholder="r8_&hellip;" autocomplete="off" spellcheck="false" />
+          <button type="button" id="saveReplicateKey" class="primary small">Save Key</button>
+        </div>
+        <p id="replicateKeyStatus" class="sep-key-status"></p>
+      </div>
       <label class="upload-card sep-upload-card" id="sepDropZone">
         <span class="upload-title">Drop a mixed track here or click to browse</span>
         <span class="upload-hint">WAV &middot; MP3 &middot; FLAC &middot; OGG &mdash; one file at a time</span>
