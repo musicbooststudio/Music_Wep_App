@@ -1,0 +1,64 @@
+name: Site Health Check
+
+on:
+  schedule:
+    # Runs daily at 08:00 UTC
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  regression:
+    name: Audio regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run audio regression
+        run: node app.audio-regression.test.js
+
+  site-health:
+    name: Live site health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check site returns 200
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://musicbooststudio.github.io/Music_Wep_App/)
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Live site returned HTTP $STATUS — expected 200"
+            exit 1
+          fi
+
+      - name: Check key assets exist
+        run: |
+          FAIL=0
+          for FILE in app.js styles.css index.html; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://musicbooststudio.github.io/Music_Wep_App/$FILE")
+            echo "$FILE → HTTP $STATUS"
+            if [ "$STATUS" != "200" ]; then
+              echo "::error::$FILE returned HTTP $STATUS"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
+      - name: Check index.html contains required markers
+        run: |
+          curl -fs https://musicbooststudio.github.io/Music_Wep_App/ \
+            | grep -q 'id="exportButton"' \
+            || { echo "::error::exportButton missing from live page"; exit 1; }
+          curl -fs https://musicbooststudio.github.io/Music_Wep_App/ \
+            | grep -q 'id="trackList"' \
+            || { echo "::error::trackList missing from live page"; exit 1; }
+          echo "Required DOM markers present"
