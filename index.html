@@ -46,6 +46,7 @@
       <ul class="nav-links">
         <li><a href="#home">Home</a></li>
         <li><a href="#workspace">Studio</a></li>
+        <li><a href="#separator">Separator</a></li>
         <li><a href="#features">Features</a></li>
         <li><a href="#docs">Docs</a></li>
       </ul>
@@ -106,12 +107,6 @@
           <button id="playButton" class="primary">Play</button>
           <button id="stopButton" class="secondary" disabled>Stop</button>
           <button id="exportButton" class="secondary" disabled>Export Mix</button>
-          <button id="separateBtn" class="secondary">&#9881; Separate Track</button>
-          <input id="separateInput" type="file" accept="audio/*" style="display:none" />
-        </div>
-        <div id="separationProgress" class="separation-progress hidden">
-          <div class="sep-bar-wrap"><div id="sepBar" class="sep-bar"></div></div>
-          <p id="sepStatus" class="sep-status">Analysing…</p>
         </div>
       </div>
 
@@ -200,6 +195,33 @@
             <p>Once your first mix is loaded, the premium controls appear instantly for sculpting, balancing, and export-ready polish.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Stem Separator Section -->
+    <section id="separator" class="separator-section">
+      <div class="section-heading">
+        <h2>Stem Separator</h2>
+        <p>Upload a mixed track to isolate Bass, Drums, Vocals and Other into individual stems, then load only the ones you want into the mixer.</p>
+      </div>
+      <label class="upload-card sep-upload-card" id="sepDropZone">
+        <span class="upload-title">Drop a mixed track here or click to browse</span>
+        <span class="upload-hint">WAV &middot; MP3 &middot; FLAC &middot; OGG &mdash; one file at a time</span>
+        <input id="separateInput" type="file" accept="audio/*" />
+      </label>
+      <div id="separationProgress" class="separation-progress hidden">
+        <div class="sep-bar-wrap"><div id="sepBar" class="sep-bar"></div></div>
+        <p id="sepStatus" class="sep-status">Analysing…</p>
+      </div>
+      <div id="sepResults" class="sep-results hidden">
+        <div class="sep-results-header">
+          <h3 id="sepResultsTitle">Separated stems &mdash; review before loading</h3>
+          <div class="sep-results-actions">
+            <button type="button" id="loadStemsBtn" class="primary small">Load into Mixer</button>
+            <button type="button" id="clearSepBtn" class="secondary small">Clear All</button>
+          </div>
+        </div>
+        <div id="sepStemList" class="sep-stem-list"></div>
       </div>
     </section>
 

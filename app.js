@@ -34,11 +34,15 @@ const snapshotSelect = document.getElementById('snapshotSelect');
 const restoreSnapshotBtn = document.getElementById('restoreSnapshotBtn');
 const compareModeBtn = document.getElementById('compareModeBtn');
 const heroUploadBtn = document.getElementById('heroUploadBtn');
-const separateBtn = document.getElementById('separateBtn');
 const separateInput = document.getElementById('separateInput');
+const sepDropZone = document.getElementById('sepDropZone');
 const separationProgress = document.getElementById('separationProgress');
 const sepBar = document.getElementById('sepBar');
 const sepStatus = document.getElementById('sepStatus');
+const sepResults = document.getElementById('sepResults');
+const sepStemList = document.getElementById('sepStemList');
+const loadStemsBtn = document.getElementById('loadStemsBtn');
+const clearSepBtn = document.getElementById('clearSepBtn');
 const masteringContent = document.getElementById('masteringContent');
 const masteringPlaceholder = document.getElementById('masteringPlaceholder');
 const mixStateBadge = document.getElementById('mixStateBadge');
@@ -57,6 +61,7 @@ let autoLevelingEnabled = false;
 let compareModeEnabled = false;
 let snapshots = [];
 let currentPresetName = 'balanced';
+let separatedStems = []; // pending separator results before user loads into mixer
 
 // Initialize Stripe
 function initStripe() {
@@ -1053,7 +1058,7 @@ function makeStemObject(name, buffer) {
     denoiser: 0, low: 0, saturation: 0, autoGain: 0,
     hasAppliedProcessing: false, tubeDrive: 0, reverb: 0,
     hpf: 20, effectMode: 'manual', lowMid: 0, mid: 0,
-    presence: 0, lpf: 20000,
+    presence: 0, lpf: 20000, fromSeparator: false,
     gainNode: null, panNode: null, denoiserNode: null, lowNode: null,
     saturationNode: null, tubeNode: null, dryNode: null, wetNode: null,
     reverbDelay: null, hpfNode: null, lowMidNode: null, midNode: null,
@@ -1061,7 +1066,54 @@ function makeStemObject(name, buffer) {
   };
 }
 
+function getStemIcon(name) {
+  if (name.includes('Bass'))   return '\uD83C\uDFB8';
+  if (name.includes('Drums'))  return '\uD83E\uDD41';
+  if (name.includes('Vocals')) return '\uD83C\uDFA4';
+  return '\uD83C\uDFB9';
+}
+
+function renderSepResults() {
+  if (!sepStemList || !sepResults) return;
+  if (!separatedStems.length) {
+    sepResults.classList.add('hidden');
+    return;
+  }
+  sepResults.classList.remove('hidden');
+  sepStemList.innerHTML = '';
+  separatedStems.forEach((stem, i) => {
+    const card = document.createElement('div');
+    card.className = 'sep-stem-card';
+    card.innerHTML = `
+      <div class="sep-stem-info">
+        <span class="sep-stem-icon">${getStemIcon(stem.name)}</span>
+        <span class="sep-stem-name">${stem.name}</span>
+      </div>
+      <button type="button" class="secondary small" data-sep-remove="${i}">Remove</button>
+    `;
+    card.querySelector('[data-sep-remove]').addEventListener('click', () => {
+      separatedStems.splice(i, 1);
+      renderSepResults();
+    });
+    sepStemList.appendChild(card);
+  });
+}
+
+function clearSeparatedStems() {
+  // also evict any previously loaded separator stems from the main mixer
+  if (stems.some(s => s.fromSeparator)) {
+    stems = stems.filter(s => !s.fromSeparator);
+    renderTracks();
+    updateMixAssistant();
+    toggleMasteringVisibility();
+    updateMixStateBadge();
+  }
+  separatedStems = [];
+  renderSepResults();
+}
+
 async function separateTrack(file) {
+  clearSeparatedStems(); // clear old results and evict prior separator stems from mixer
   ensureAudioContext();
   separationProgress.classList.remove('hidden');
   sepBar.style.width = '10%';
@@ -1077,67 +1129,67 @@ async function separateTrack(file) {
   }
 
   const base = file.name.replace(/\.[^.]+$/, '');
+  // 4th-order Butterworth cascade: Q values are the two conjugate pole pairs
   const bandConfigs = [
     {
       name: `${base} — Bass`,
       filters: [
-        { type: 'lowpass',  frequency: 200, Q: 0.7 },
-        { type: 'lowpass',  frequency: 200, Q: 0.7 }, // cascaded for steeper roll-off
+        { type: 'lowpass',  frequency: 200,  Q: 0.54 },
+        { type: 'lowpass',  frequency: 200,  Q: 1.31 },
+        { type: 'lowpass',  frequency: 200,  Q: 0.54 },
+        { type: 'lowpass',  frequency: 200,  Q: 1.31 },
       ],
-      outputGain: 1.5,
+      outputGain: 1.6,
     },
     {
       name: `${base} — Drums`,
       filters: [
-        { type: 'highpass', frequency: 150,  Q: 0.7 },
-        { type: 'lowpass',  frequency: 8000, Q: 0.7 },
+        { type: 'highpass', frequency: 150,  Q: 0.54 },
+        { type: 'highpass', frequency: 150,  Q: 1.31 },
+        { type: 'lowpass',  frequency: 8000, Q: 0.54 },
+        { type: 'lowpass',  frequency: 8000, Q: 1.31 },
       ],
       outputGain: 1.0,
     },
     {
       name: `${base} — Vocals`,
-      midOnly: true, // center channel extraction
+      midOnly: true, // center-channel (mono-sum) extraction for typical center-panned vocals
       filters: [
-        { type: 'highpass', frequency: 300,  Q: 0.8 },
-        { type: 'lowpass',  frequency: 4000, Q: 0.8 },
+        { type: 'highpass', frequency: 300,  Q: 0.54 },
+        { type: 'highpass', frequency: 300,  Q: 1.31 },
+        { type: 'lowpass',  frequency: 4000, Q: 0.54 },
+        { type: 'lowpass',  frequency: 4000, Q: 1.31 },
       ],
       outputGain: 1.2,
     },
     {
       name: `${base} — Other`,
       filters: [
-        { type: 'highpass', frequency: 4000, Q: 0.7 },
+        { type: 'highpass', frequency: 4000, Q: 0.54 },
+        { type: 'highpass', frequency: 4000, Q: 1.31 },
       ],
-      outputGain: 1.3,
+      outputGain: 1.4,
     },
   ];
 
-  const newStems = [];
   for (let i = 0; i < bandConfigs.length; i++) {
     const config = bandConfigs[i];
     const label = config.name.split('—')[1].trim();
     sepStatus.textContent = `Separating ${label}…`;
     sepBar.style.width = `${15 + (i / bandConfigs.length) * 70}%`;
-    await new Promise(r => setTimeout(r, 0)); // yield to keep UI responsive
+    await new Promise(r => setTimeout(r, 0));
     const buf = await separateStemBand(sourceBuffer, config);
-    newStems.push(makeStemObject(config.name, buf));
+    const stem = makeStemObject(config.name, buf);
+    stem.fromSeparator = true;
+    separatedStems.push(stem);
   }
 
   sepBar.style.width = '100%';
-  sepStatus.textContent = 'Loading stems into mixer…';
-  await new Promise(r => setTimeout(r, 100));
-
-  stems.push(...newStems);
-  renderTracks();
-  updateMixAssistant();
-  toggleMasteringVisibility();
-  updateMixStateBadge();
-
-  sepStatus.textContent = `Done! ${bandConfigs.length} stems loaded into the mixer.`;
-  setTimeout(() => {
-    separationProgress.classList.add('hidden');
-    sepBar.style.width = '0%';
-  }, 2500);
+  sepStatus.textContent = `Done — ${bandConfigs.length} stems ready. Review below then load into the mixer.`;
+  await new Promise(r => setTimeout(r, 150));
+  separationProgress.classList.add('hidden');
+  sepBar.style.width = '0%';
+  renderSepResults();
 }
 
 async function loadFiles(files) {
@@ -1597,11 +1649,32 @@ fileInput.addEventListener('change', (event) => {
   loadFiles(event.target.files);
 });
 
-separateBtn?.addEventListener('click', () => separateInput?.click());
 separateInput?.addEventListener('change', (e) => {
   if (e.target.files?.[0]) separateTrack(e.target.files[0]);
-  e.target.value = ''; // allow re-selecting the same file
+  e.target.value = '';
 });
+
+sepDropZone?.addEventListener('dragover', (e) => { e.preventDefault(); sepDropZone.classList.add('dragover'); });
+sepDropZone?.addEventListener('dragleave', () => sepDropZone.classList.remove('dragover'));
+sepDropZone?.addEventListener('drop', (e) => {
+  e.preventDefault();
+  sepDropZone.classList.remove('dragover');
+  if (e.dataTransfer?.files?.[0]) separateTrack(e.dataTransfer.files[0]);
+});
+
+loadStemsBtn?.addEventListener('click', () => {
+  if (!separatedStems.length) return;
+  stems.push(...separatedStems);
+  separatedStems = [];
+  sepResults.classList.add('hidden');
+  renderTracks();
+  updateMixAssistant();
+  toggleMasteringVisibility();
+  updateMixStateBadge();
+  document.getElementById('workspace')?.scrollIntoView({ behavior: 'smooth' });
+});
+
+clearSepBtn?.addEventListener('click', clearSeparatedStems);
 
 dropZone.addEventListener('dragover', (event) => {
   event.preventDefault();
