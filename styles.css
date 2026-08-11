@@ -13,6 +13,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+  overflow-x: hidden;
 }
 
 main {
@@ -211,6 +212,12 @@ button:disabled {
 .master-panel {
   max-height: 80vh;
   overflow-y: auto;
+}
+
+.actions-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .panel {
@@ -860,11 +867,12 @@ input[type="range"] {
 
   .modal-content {
     width: 95%;
-    margin: 20% auto;
+    margin: 15% auto;
   }
 
   .detection-info {
     flex-direction: column;
+    align-items: center;
   }
 
   .premium-hero {
@@ -876,12 +884,26 @@ input[type="range"] {
     text-align: center;
   }
 
+  .hero-copy p {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .hero-actions {
     justify-content: center;
   }
 
   .hero-visual {
-    min-height: 220px;
+    min-height: 180px;
+  }
+
+  /* Stack panels vertically — critical for any phone */
+  .controls-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .master-panel {
+    max-height: none;
   }
 }
 
@@ -1392,14 +1414,22 @@ input[type="range"] {
 
 @media (max-width: 640px) {
   .navbar {
-    flex-direction: column;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
   }
 
   .nav-links {
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
     justify-content: center;
+    width: 100%;
+  }
+
+  .auth-section {
+    width: 100%;
+    justify-content: center;
+    display: flex;
   }
 
   .features-grid {
@@ -1413,5 +1443,86 @@ input[type="range"] {
   .footer-bottom {
     flex-direction: column;
     text-align: center;
+  }
+
+  .hero-visual {
+    display: none;
+  }
+
+  .actions-row button {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+
+  .sep-mode-toggle {
+    flex-direction: column;
+  }
+
+  .sep-mode-btn {
+    width: 100%;
+  }
+}
+
+/* ===== iPhone and narrow phone (≤480px) ===== */
+@media (max-width: 480px) {
+  main {
+    padding: 20px 14px;
+  }
+
+  .premium-hero {
+    padding: 24px 16px;
+  }
+
+  h1 {
+    font-size: clamp(1.6rem, 7vw, 2.2rem);
+  }
+
+  .hero-badge {
+    font-size: 0.72rem;
+  }
+
+  .section-heading h2 {
+    font-size: clamp(1.4rem, 6vw, 1.8rem);
+  }
+
+  .modal-content {
+    width: 96%;
+    margin: 8% auto;
+    padding: 20px 16px;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .track-card {
+    padding: 12px;
+  }
+
+  .track-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .upload-card {
+    padding: 28px 16px;
+  }
+
+  .sep-key-row {
+    flex-direction: column;
+  }
+
+  .sep-key-input {
+    width: 100%;
+  }
+
+  .sep-results-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detection-card {
+    width: 100%;
+    justify-content: center;
   }
 }
