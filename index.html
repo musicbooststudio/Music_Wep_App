@@ -106,6 +106,12 @@
           <button id="playButton" class="primary">Play</button>
           <button id="stopButton" class="secondary" disabled>Stop</button>
           <button id="exportButton" class="secondary" disabled>Export Mix</button>
+          <button id="separateBtn" class="secondary">&#9881; Separate Track</button>
+          <input id="separateInput" type="file" accept="audio/*" style="display:none" />
+        </div>
+        <div id="separationProgress" class="separation-progress hidden">
+          <div class="sep-bar-wrap"><div id="sepBar" class="sep-bar"></div></div>
+          <p id="sepStatus" class="sep-status">Analysing…</p>
         </div>
       </div>
 

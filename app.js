@@ -34,6 +34,11 @@ const snapshotSelect = document.getElementById('snapshotSelect');
 const restoreSnapshotBtn = document.getElementById('restoreSnapshotBtn');
 const compareModeBtn = document.getElementById('compareModeBtn');
 const heroUploadBtn = document.getElementById('heroUploadBtn');
+const separateBtn = document.getElementById('separateBtn');
+const separateInput = document.getElementById('separateInput');
+const separationProgress = document.getElementById('separationProgress');
+const sepBar = document.getElementById('sepBar');
+const sepStatus = document.getElementById('sepStatus');
 const masteringContent = document.getElementById('masteringContent');
 const masteringPlaceholder = document.getElementById('masteringPlaceholder');
 const mixStateBadge = document.getElementById('mixStateBadge');
@@ -1003,6 +1008,138 @@ async function createStemNodes(track) {
   return { source, gainNode, panNode };
 }
 
+// Build a mono-sum (mid) AudioBuffer for center-channel vocal extraction
+function createMidBuffer(sourceBuffer) {
+  ensureAudioContext();
+  const mid = audioContext.createBuffer(2, sourceBuffer.length, sourceBuffer.sampleRate);
+  const L = sourceBuffer.getChannelData(0);
+  const R = sourceBuffer.numberOfChannels > 1 ? sourceBuffer.getChannelData(1) : L;
+  const outL = mid.getChannelData(0);
+  const outR = mid.getChannelData(1);
+  for (let i = 0; i < sourceBuffer.length; i++) {
+    outL[i] = outR[i] = (L[i] + R[i]) * 0.5;
+  }
+  return mid;
+}
+
+async function separateStemBand(sourceBuffer, config) {
+  const { sampleRate, length } = sourceBuffer;
+  const offline = new OfflineAudioContext(2, length, sampleRate);
+  const src = offline.createBufferSource();
+  src.buffer = config.midOnly ? createMidBuffer(sourceBuffer) : sourceBuffer;
+
+  let node = src;
+  for (const f of config.filters) {
+    const filter = offline.createBiquadFilter();
+    filter.type = f.type;
+    filter.frequency.value = f.frequency;
+    filter.Q.value = f.Q ?? 0.7;
+    node.connect(filter);
+    node = filter;
+  }
+
+  const outGain = offline.createGain();
+  outGain.gain.value = config.outputGain ?? 1.0;
+  node.connect(outGain);
+  outGain.connect(offline.destination);
+  src.start();
+  return offline.startRendering();
+}
+
+function makeStemObject(name, buffer) {
+  return {
+    name, buffer, file: null,
+    gain: 0, pan: 0, muted: false, solo: false,
+    denoiser: 0, low: 0, saturation: 0, autoGain: 0,
+    hasAppliedProcessing: false, tubeDrive: 0, reverb: 0,
+    hpf: 20, effectMode: 'manual', lowMid: 0, mid: 0,
+    presence: 0, lpf: 20000,
+    gainNode: null, panNode: null, denoiserNode: null, lowNode: null,
+    saturationNode: null, tubeNode: null, dryNode: null, wetNode: null,
+    reverbDelay: null, hpfNode: null, lowMidNode: null, midNode: null,
+    presenceNode: null, lpfNode: null, source: null,
+  };
+}
+
+async function separateTrack(file) {
+  ensureAudioContext();
+  separationProgress.classList.remove('hidden');
+  sepBar.style.width = '10%';
+  sepStatus.textContent = 'Decoding audio…';
+
+  let sourceBuffer;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    sourceBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  } catch (err) {
+    sepStatus.textContent = `Could not decode audio: ${err.message}`;
+    return;
+  }
+
+  const base = file.name.replace(/\.[^.]+$/, '');
+  const bandConfigs = [
+    {
+      name: `${base} — Bass`,
+      filters: [
+        { type: 'lowpass',  frequency: 200, Q: 0.7 },
+        { type: 'lowpass',  frequency: 200, Q: 0.7 }, // cascaded for steeper roll-off
+      ],
+      outputGain: 1.5,
+    },
+    {
+      name: `${base} — Drums`,
+      filters: [
+        { type: 'highpass', frequency: 150,  Q: 0.7 },
+        { type: 'lowpass',  frequency: 8000, Q: 0.7 },
+      ],
+      outputGain: 1.0,
+    },
+    {
+      name: `${base} — Vocals`,
+      midOnly: true, // center channel extraction
+      filters: [
+        { type: 'highpass', frequency: 300,  Q: 0.8 },
+        { type: 'lowpass',  frequency: 4000, Q: 0.8 },
+      ],
+      outputGain: 1.2,
+    },
+    {
+      name: `${base} — Other`,
+      filters: [
+        { type: 'highpass', frequency: 4000, Q: 0.7 },
+      ],
+      outputGain: 1.3,
+    },
+  ];
+
+  const newStems = [];
+  for (let i = 0; i < bandConfigs.length; i++) {
+    const config = bandConfigs[i];
+    const label = config.name.split('—')[1].trim();
+    sepStatus.textContent = `Separating ${label}…`;
+    sepBar.style.width = `${15 + (i / bandConfigs.length) * 70}%`;
+    await new Promise(r => setTimeout(r, 0)); // yield to keep UI responsive
+    const buf = await separateStemBand(sourceBuffer, config);
+    newStems.push(makeStemObject(config.name, buf));
+  }
+
+  sepBar.style.width = '100%';
+  sepStatus.textContent = 'Loading stems into mixer…';
+  await new Promise(r => setTimeout(r, 100));
+
+  stems.push(...newStems);
+  renderTracks();
+  updateMixAssistant();
+  toggleMasteringVisibility();
+  updateMixStateBadge();
+
+  sepStatus.textContent = `Done! ${bandConfigs.length} stems loaded into the mixer.`;
+  setTimeout(() => {
+    separationProgress.classList.add('hidden');
+    sepBar.style.width = '0%';
+  }, 2500);
+}
+
 async function loadFiles(files) {
   ensureAudioContext();
   const fileArray = Array.from(files);
@@ -1458,6 +1595,12 @@ function writeString(view, offset, string) {
 
 fileInput.addEventListener('change', (event) => {
   loadFiles(event.target.files);
+});
+
+separateBtn?.addEventListener('click', () => separateInput?.click());
+separateInput?.addEventListener('change', (e) => {
+  if (e.target.files?.[0]) separateTrack(e.target.files[0]);
+  e.target.value = ''; // allow re-selecting the same file
 });
 
 dropZone.addEventListener('dragover', (event) => {
